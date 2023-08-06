@@ -1,60 +1,58 @@
+use ggez::event;
+use ggez::glam::*;
+use ggez::graphics::{self};
+use ggez::{Context, GameResult};
 use rand::prelude::*;
-use std::fmt::Display;
-
 #[derive(Debug, Clone)]
-pub struct Cell {
+struct Cell {
     state: i8,
+    x: usize,
+    y: usize,
 }
 #[derive(Debug, Clone)]
-pub struct Grid {
-    pub xmax: usize,
-    pub ymax: usize,
+struct Grid {
+    xmax: usize,
+    ymax: usize,
     xmin: usize,
     ymin: usize,
-    cells: Vec<Vec<Cell>>,
+    cells: Vec<Cell>,
 }
 
 impl Grid {
-    pub fn new(x: usize, y: usize, probability: f64) -> Self {
+    fn new(x: usize, y: usize, probability: f64) -> Self {
         let mut rng = rand::thread_rng();
-        let mut outer: Vec<Vec<Cell>> = Vec::with_capacity(y);
-        for _ in 0..y {
-            let mut inner: Vec<Cell> = Vec::with_capacity(x);
-            for _ in 0..x {
+        let size = (x as i32) * (y as i32);
+        let mut cells: Vec<Cell> = Vec::with_capacity(size as usize);
+        for j in 0..y {
+            for i in 0..x {
                 let rng_value: f64 = rng.gen();
                 let state: i8 = if rng_value > probability { 1 } else { 0 };
-                let cell = Cell::new(state);
-                inner.push(cell);
+                let cell = Cell::new(state, i, j);
+                cells.push(cell);
             }
-            outer.push(inner);
         }
         Grid {
             xmax: x,
             ymax: y,
             xmin: 0,
             ymin: 0,
-            cells: outer,
+            cells: cells,
         }
     }
 
-    pub fn get_cell(&self, x: usize, y: usize) -> &Cell {
-        &self.cells[y][x]
+    fn get_cell(&self, x: usize, y: usize) -> &Cell {
+        // let x_coord = x as i32;
+        // let y_coord = y as i32;
+        &self.cells[y * self.xmax + x]
     }
-    pub fn set_cell(&mut self, cell: Cell, x: usize, y: usize) {
-        self.cells[y][x] = cell
+    fn set_cell(&mut self, cell: &Cell) {
+        self.cells[cell.y * self.xmax + cell.x] = cell.clone()
     }
-    pub fn get_cells(&mut self) -> &Vec<Vec<Cell>> {
+    fn get_cells(&mut self) -> &Vec<Cell> {
         &self.cells
     }
 
-    fn get_states(&mut self) -> Vec<Vec<i8>> {
-        self.get_cells()
-            .iter()
-            .map(|row| row.iter().map(|cell| cell.state).collect())
-            .collect()
-    }
-
-    pub fn get_neighbors(&mut self, x: usize, y: usize) -> i8 {
+    fn get_neighbors(&mut self, x: usize, y: usize) -> i8 {
         let xmax_bound = self.xmax - 1;
         let ymax_bound = self.ymax - 1;
 
@@ -75,22 +73,9 @@ impl Grid {
     }
 }
 
-impl Display for Grid {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut message = String::from("");
-        for row in self.clone().get_states() {
-            for state in row {
-                message = message + format!("{}", state).as_str();
-            }
-            message = message + "\n";
-        }
-        write!(f, "{}", message)
-    }
-}
-
 impl Cell {
-    fn new(state: i8) -> Self {
-        Self { state }
+    fn new(state: i8, x: usize, y: usize) -> Self {
+        Self { state, x, y }
     }
 
     pub fn update(&self, neighbors: i8) -> Self {
@@ -99,6 +84,88 @@ impl Cell {
             0 if (neighbors == 3) => 1,
             _ => self.state,
         };
-        Self { state: new_state }
+        Self {
+            state: new_state,
+            x: self.x,
+            y: self.y,
+        }
+    }
+}
+
+pub struct MainState {
+    grid: Grid,
+}
+
+impl MainState {
+    pub fn new(xmax: usize, ymax: usize, probability: f64) -> GameResult<MainState> {
+        let s = MainState {
+            grid: Grid::new(xmax, ymax, probability),
+        };
+        Ok(s)
+    }
+}
+
+impl event::EventHandler<ggez::GameError> for MainState {
+    fn update(&mut self, _ctx: &mut Context) -> GameResult {
+        let mut current_grid = self.grid.clone();
+        for j in 0..self.grid.ymax {
+            for i in 0..self.grid.xmax {
+                let cell = {
+                    let neighbors = current_grid.get_neighbors(i, j).clone();
+                    let new_cell = current_grid.get_cell(i, j);
+                    new_cell.update(neighbors)
+                };
+                self.grid.set_cell(&cell);
+            }
+        }
+        Ok(())
+    }
+
+    fn draw(&mut self, ctx: &mut Context) -> GameResult {
+        let mut canvas =
+            graphics::Canvas::from_frame(ctx, graphics::Color::from([0.1, 0.2, 0.3, 1.0]));
+        let dead_color = [0.0, 0.0, 0.0, 1.0];
+        let alive_color = [1.0, 1.0, 1.0, 1.0];
+
+        let scale = 2.0;
+
+        self.grid.get_cells().iter().for_each(|cell| {
+            canvas.draw(
+                &graphics::Quad,
+                graphics::DrawParam::new()
+                    .dest_rect(graphics::Rect::new(
+                        cell.x as f32 * scale,
+                        cell.y as f32 * scale,
+                        scale,
+                        scale,
+                    ))
+                    .color(if cell.state == 1 {
+                        alive_color
+                    } else {
+                        dead_color
+                    }),
+            );
+        });
+
+        // for cell in self.grid.get_cells() {
+        //     canvas.draw(
+        //         &graphics::Quad,
+        //         graphics::DrawParam::new()
+        //             .dest_rect(graphics::Rect::new(
+        //                 cell.x as f32 * scale,
+        //                 cell.y as f32 * scale,
+        //                 scale,
+        //                 scale,
+        //             ))
+        //             .color(if cell.state == 1 {
+        //                 alive_color
+        //             } else {
+        //                 dead_color
+        //             }),
+        //     );
+        // }
+
+        canvas.finish(ctx)?;
+        Ok(())
     }
 }
