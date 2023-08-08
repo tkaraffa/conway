@@ -20,17 +20,21 @@ struct Grid {
 
 impl Grid {
     fn new(x: usize, y: usize, probability: f64) -> Self {
+        {
+            assert!(x > 0);
+            assert!(y > 0);
+        }
         let mut rng = rand::thread_rng();
-        let size = (x as i32) * (y as i32);
-        let mut cells: Vec<Cell> = Vec::with_capacity(size as usize);
-        for j in 0..y {
-            for i in 0..x {
+        let mut cells: Vec<Cell> = Vec::with_capacity(x * y as usize);
+        (0..y).for_each(|y| {
+            (0..x).for_each(|x| {
                 let rng_value: f64 = rng.gen();
                 let state: i8 = if rng_value > probability { 1 } else { 0 };
-                let cell = Cell::new(state, i, j);
+                let cell = Cell::new(state, x, y);
                 cells.push(cell);
-            }
-        }
+            })
+        });
+
         Grid {
             xmax: x,
             ymax: y,
@@ -92,12 +96,14 @@ impl Cell {
 
 pub struct MainState {
     grid: Grid,
+    scale: f32,
 }
 
 impl MainState {
-    pub fn new(xmax: usize, ymax: usize, probability: f64) -> GameResult<MainState> {
+    pub fn new(xmax: usize, ymax: usize, probability: f64, scale: f32) -> GameResult<MainState> {
         let s = MainState {
             grid: Grid::new(xmax, ymax, probability),
+            scale,
         };
         Ok(s)
     }
@@ -105,17 +111,14 @@ impl MainState {
 
 impl event::EventHandler<ggez::GameError> for MainState {
     fn update(&mut self, _ctx: &mut Context) -> GameResult {
-        let mut current_grid = self.grid.clone();
-        for y in 0..self.grid.ymax {
-            for x in 0..self.grid.xmax {
-                let cell = {
-                    let neighbors = current_grid.get_neighbors(x, y).clone();
-                    let new_cell = current_grid.get_cell(x, y);
-                    new_cell.update(neighbors)
-                };
-                self.grid.set_cell(&cell);
-            }
-        }
+        (0..self.grid.ymax).for_each(|y| {
+            (0..self.grid.xmax).for_each(|x| {
+                let neighbors = self.grid.get_neighbors(x, y).clone();
+                let new_cell = self.grid.get_cell(x, y).update(neighbors);
+                self.grid.set_cell(&new_cell);
+            })
+        });
+
         Ok(())
     }
 
@@ -125,7 +128,15 @@ impl event::EventHandler<ggez::GameError> for MainState {
         let dead_color = [0.0, 0.0, 0.0, 1.0];
         let alive_color = [1.0, 1.0, 1.0, 1.0];
 
-        let scale = 4.0;
+        let scale = self.scale;
+
+        let color_fn = |state: i8| -> [f32; 4] {
+            if state == 1 {
+                alive_color
+            } else {
+                dead_color
+            }
+        };
 
         self.grid.get_cells().iter().for_each(|cell| {
             canvas.draw(
@@ -137,11 +148,7 @@ impl event::EventHandler<ggez::GameError> for MainState {
                         scale,
                         scale,
                     ))
-                    .color(if cell.state == 1 {
-                        alive_color
-                    } else {
-                        dead_color
-                    }),
+                    .color(color_fn(cell.state)),
             );
         });
 

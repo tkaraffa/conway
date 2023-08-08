@@ -7,10 +7,11 @@ pub fn main() -> GameResult {
     let cb = ggez::ContextBuilder::new("Conway's Game of Life", "Tom");
     let (ctx, event_loop) = cb.build()?;
 
-    let xmax = 120;
-    let ymax = 120;
-    let probability = 0.4;
+    let xmax = 50;
+    let ymax = 50;
+    let probability: f64 = 0.4;
+    let scale: f32 = 8.0;
 
-    let state = MainState::new(xmax, ymax, probability)?;
+    let state = MainState::new(xmax, ymax, probability, scale)?;
     event::run(ctx, event_loop, state)
 }
