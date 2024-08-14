@@ -3,12 +3,14 @@ use ggez::glam::*;
 use ggez::graphics::{self};
 use ggez::{Context, GameResult};
 use rand::prelude::*;
+
 #[derive(Debug, Clone)]
 struct Cell {
     state: i8,
     x: usize,
     y: usize,
 }
+
 #[derive(Debug, Clone)]
 struct Grid {
     xmax: usize,
